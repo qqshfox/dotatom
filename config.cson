@@ -1,0 +1,23 @@
+'exception-reporting':
+  'userId': 'c3790573-4417-12ed-8eb9-8f275d58c01a'
+'welcome':
+  'showOnStartup': false
+'metrics':
+  'userId': '06d66615700a1caedef818b8fc8206721ca0a9e4'
+'editor':
+  'showIndentGuide': true
+  'fontSize': 12
+'core':
+  'themes': [
+    'atom-dark-ui'
+    'monokai'
+  ]
+  'useReactEditor': true
+  'disabledPackages': [
+    'linter'
+    'linter-clang'
+  ]
+'linter-ruby': {}
+'autocomplete': {}
+'minimap':
+  'autoToggle': true
