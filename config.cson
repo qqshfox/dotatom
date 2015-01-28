@@ -19,8 +19,9 @@
       ".o"
     ]
     disabledPackages: [
-      "linter-clang"
       "atom-lint"
+      "minimap-git-diff"
+      "linter-clang"
     ]
     themes: [
       "atom-dark-ui"
@@ -28,8 +29,7 @@
     ]
   minimap:
     plugins:
+      selection: true
       "color-highlight": true
       "highlight-selected": true
-      "git-diff": true
-      selection: true
   linter: {}
