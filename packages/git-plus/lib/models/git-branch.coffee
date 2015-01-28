@@ -8,7 +8,7 @@ module.exports.gitBranches = ->
   git.cmd
     args: ['branch'],
     stdout: (data) ->
-      new BranchListView data
+      new BranchListView(data)
 
 class InputView extends View
   @content: ->
@@ -20,10 +20,13 @@ class InputView extends View
     atom.workspaceView.append this
     @branchEditor.focus()
     @on 'core:cancel', => @detach()
+
     @branchEditor.on 'core:confirm', =>
-      name = $(this).text().slice(2)
-      @createBranch name
-      @detach()
+      editor = @branchEditor.getEditor()
+      name = editor.getWordUnderCursor()
+      if name.length > 0
+        @createBranch name
+        @detach()
 
   createBranch: (name) ->
     git.cmd

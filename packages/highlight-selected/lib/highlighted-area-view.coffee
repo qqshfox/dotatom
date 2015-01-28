@@ -27,8 +27,8 @@ class HighlightedAreaView extends View
 
     editor = @getActiveEditor()
     return unless editor
-    return if editor.getSelection().isEmpty()
-    return unless @isWordSelected(editor.getSelection())
+    return if editor.getLastSelection().isEmpty()
+    return unless @isWordSelected(editor.getLastSelection())
 
     @selections = editor.getSelections()
 
@@ -74,7 +74,7 @@ class HighlightedAreaView extends View
       'highlight-selected.hideHighlightOnSelectedWord')
     outcome = false
     for selection in selections
-      selectionRange = selection.getScreenRange()
+      selectionRange = selection.getBufferRange()
       outcome = (range.start.column is selectionRange.start.column) and
                 (range.start.row is selectionRange.start.row) and
                 (range.end.column is selectionRange.end.column) and

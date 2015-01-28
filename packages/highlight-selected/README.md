@@ -30,11 +30,11 @@ between styles or just overwrite the default box/background.
   }
   // Light theme box (set in settings)
   .highlight-selected.light-theme .region {
-    border-color: rgba(255,0,0, 0.8);
+    border-color: rgba(255, 128, 64, 0.4);
   }
   // Light theme background (set in settings)
   .highlight-selected.light-theme.background .region {
-    background-color: rgba(252,0,0, 0.3);
+    background-color: rgba(255, 128, 64, 0.2);
   }
 }
 ```
@@ -42,7 +42,6 @@ between styles or just overwrite the default box/background.
 
 # Issues and Todo
 
-- Add specs to test it
 - Should we highlight symbols?
 - Merge this feature in the
 [find-and-replace](https://github.com/atom/find-and-replace) package

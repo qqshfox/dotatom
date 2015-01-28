@@ -38,10 +38,13 @@ class InputView extends View
 
   initialize: (callback) ->
     atom.workspaceView.append this
+    @on 'core:cancel', =>
+      @detach()
     @objectHash.focus()
     @objectHash.on 'core:confirm', =>
-      object = $(this).text().slice(2)
-      callback object
+      text = $(this).text().split(' ')
+      name = if text.length is 2 then text[1] else text[0]
+      callback text
       @detach()
 
 module.exports = (objectHash, file) ->

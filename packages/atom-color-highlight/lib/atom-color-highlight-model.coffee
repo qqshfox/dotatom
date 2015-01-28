@@ -1,26 +1,25 @@
 _ = require 'underscore-plus'
-{Emitter, Subscriber} = require 'emissary'
-{OnigRegExp} = require 'oniguruma'
-Color = require 'pigments'
+{CompositeDisposable, Emitter} = require 'event-kit'
 
 module.exports =
 class AtomColorHighlightModel
-  Emitter.includeInto(this)
-  Subscriber.includeInto(this)
-
-  @Color: Color
+  @idCounter: 0
 
   @markerClass: 'color-highlight'
   @bufferRange: [[0,0], [Infinity,Infinity]]
 
-  constructor: (@editor, @buffer) ->
-    finder = atom.packages.getLoadedPackage('project-palette-finder')
-    if finder?
-      module = require(finder.path)
-      Color = module.constructor.Color
-      @subscribe module, 'palette:ready', @update
+  constructor: (@editor) ->
+    @buffer = @editor.getBuffer()
+    @id = AtomColorHighlightModel.idCounter++
+    @dirty = false
+    @emitter = new Emitter
+    @subscriptions = new CompositeDisposable
 
-    @constructor.Color = Color
+  onDidUpdateMarkers: (callback) ->
+    @emitter.on 'did-update-markers', callback
+
+  onDidDestroy: (callback) ->
+    @emitter.on 'did-destroy', callback
 
   update: =>
     return if @frameRequested
@@ -31,24 +30,29 @@ class AtomColorHighlightModel
       @updateMarkers()
 
   subscribeToBuffer: ->
-    @subscribe @buffer, 'contents-modified', @update
+    @subscriptions.add @editor.onDidChange => @dirty = true
+    @subscriptions.add @editor.onDidStopChanging => @update()
+    @subscriptions.add @editor.displayBuffer.onDidTokenize => @update()
+    @subscriptions.add @editor.onDidDestroy => @destroy()
 
   unsubscribeFromBuffer: ->
-    @unsubscribe @buffer, 'contents-modified', @update
+    @subscriptions.dispose()
     @buffer = null
 
   init: ->
-    if @buffer?
-      @subscribeToBuffer()
-      @destroyAllMarkers()
-      @update()
+    @subscribeToBuffer()
+    @destroyAllMarkers()
+    @update()
 
-  dispose: ->
-    @unsubscribe()
+  destroy: ->
+    @destroyed = true
+    @emitter.emit('did-destroy')
     @unsubscribeFromBuffer() if @buffer?
 
+  isDestroyed: -> @destroyed
+
   eachColor: (block) ->
-    return Color.scanBufferForColors(@buffer, block) if @buffer?
+    return @constructor.Color.scanBufferForColors(@buffer, block) if @buffer?
 
   updateMarkers: ->
     return @destroyAllMarkers() unless @buffer?
@@ -68,6 +72,8 @@ class AtomColorHighlightModel
         results = [] unless results?
 
         for res in results
+          continue unless res?
+
           {bufferRange: range, match, color} = res
 
           continue if color.isInvalid
@@ -85,8 +91,10 @@ class AtomColorHighlightModel
         marker.destroy() for id, marker of markersToRemoveById
 
         @markers = updatedMarkers
-        @emit 'updated', _.clone(@markers)
+        @emitter.emit 'did-update-markers', _.clone(@markers)
+        @dirty = false
       .fail (e) ->
+        @dirty = false
         console.log e
 
     catch e
@@ -105,7 +113,7 @@ class AtomColorHighlightModel
   destroyAllMarkers: ->
     marker.destroy() for marker in @markers ? []
     @markers = []
-    @emit 'updated', _.clone(@markers)
+    @emitter.emit 'did-update-markers', _.clone(@markers)
 
   createMarker: (color, colorObject, range) ->
     l = colorObject.luma()

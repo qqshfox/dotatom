@@ -1,5 +1,83 @@
 ## Changelog
 
+### 4.3.5
+
+- Update css selectors and keymappings with new atom API standards
+
+### 4.3.2
+
+- Fix for `Checkout new branch`
+
+### 4.3.1
+
+- `Git Show` can be cancelled with escape
+
+### 4.3.0
+
+- Confirm on `Git Remove`
+
+### 4.2.6
+
+- Handle case of no available panes after saving commit message
+
+### 4.2.5
+
+- Handle case of no available panes after closing commit message pane
+
+### 4.2.4
+
+- Minor patch
+
+### 4.2.3
+
+- Temporary fix for `Git Pull` issue on yosemite mac's thanks to @Azakur4.
+
+### 4.2.2
+
+- Remove hyphenated package name in menu
+
+### 4.2.1
+
+- Small fix in git-commit.coffee line 90 where promise returns a TextBuffer. Using given TextBuffer for subscriptions
+rather than the 'buffer' property in the TextBuffer.
+
+### 4.2.0
+
+- New Git merge feature thanks to @herlon214
+
+### 4.1.2
+
+- Using new atom api for configs and subscribing to make it easier for moving forward and maintenance
+
+### 4.1.1
+
+- Fix issue of commit tab not opening
+- Still need to remove dependency on Theorist
+
+### 4.1.0
+
+- Return of git-plus command palette
+
+### 4.0.0
+
+- THIS IS THE LAST PUSH OF NEW FEATURES. I'm stopping development of this package because I don't have time and on top of that, I don't use atom anymore
+- Adding new command called 'Git Run'. This allows you to run git commands like in the command line. i.e. `add --all .` or `clone git@github.com:akonwi/git-plus my-git-plus`
+- Removed Git-Plus command palette and merged all commands into atom command palette
+- all commands are now accessible via keymappings
+- Add setting to change message display time in seconds
+
+### 3.10.4
+
+- Fix for object names being shortened unnecessarily.
+
+### 3.10.3
+
+- Fix for branch names being shortened unnecessarily.
+
+### 3.10.2
+
+- Fix 'Git Log' for windows users
+
 ### 3.10.1
 
 - Git pull lists remotes if there are multiple and remote branches
@@ -28,7 +106,7 @@
 
 ### 3.5.0
 
-- The more common commands are now accessible through keybindings  
+- The more common commands are now accessible through keybindings
 
     * Add
     * Add all and commit
@@ -67,7 +145,7 @@
 ### 3.0.0
 #### Includes massive amounts of refactoring to internal api
 
-- Dedicated command palette for git commands. Can be opened with  
+- Dedicated command palette for git commands. Can be opened with
 `[cmd|ctrl]-shift-h`
 
 - `Git init` is available in projects that are not git repos.
@@ -112,7 +190,7 @@
 
 ### 2.8.0
 
-- `Git log`  
+- `Git log`
   Can also configure how many commits to show in log
 
 - `Git show` commits of current file

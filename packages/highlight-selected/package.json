@@ -1,7 +1,7 @@
 {
   "name": "highlight-selected",
   "main": "./lib/highlight-selected",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Highlights the current word selected when double clicking",
   "repository": {
     "type": "git",
@@ -25,10 +25,64 @@
     "url": "https://github.com/richrace/highlight-selected/issues"
   },
   "homepage": "https://github.com/richrace/highlight-selected",
-  "_id": "highlight-selected@0.6.0",
+  "_id": "highlight-selected@0.7.0",
   "dist": {
-    "shasum": "816415f397fc2295c2a98aa9b76859a9bd2ff0b9"
+    "shasum": "2a927fde4c7a26a49c619e23ffd22d45cffffe6c"
   },
-  "_resolved": "/var/folders/hd/v807c8755mn79zfb7w5yt0sh0000gn/T/d-114726-31420-rlz4tp/package.tgz",
-  "_from": "/var/folders/hd/v807c8755mn79zfb7w5yt0sh0000gn/T/d-114726-31420-rlz4tp/package.tgz"
+  "_resolved": "/private/var/folders/hd/v807c8755mn79zfb7w5yt0sh0000gn/T/d-11506-50252-1bgu9yi/package.tgz",
+  "_from": "/private/var/folders/hd/v807c8755mn79zfb7w5yt0sh0000gn/T/d-11506-50252-1bgu9yi/package.tgz",
+  "_atomModuleCache": {
+    "version": 1,
+    "dependencies": [
+      {
+        "name": "underscore-plus",
+        "version": "1.6.6",
+        "path": "node_modules/underscore-plus/lib/underscore-plus.js"
+      },
+      {
+        "name": "underscore",
+        "version": "1.6.0",
+        "path": "node_modules/underscore-plus/node_modules/underscore/underscore.js"
+      }
+    ],
+    "extensions": {
+      ".json": [
+        "coffeelint.json",
+        "node_modules/underscore-plus/node_modules/underscore/package.json",
+        "node_modules/underscore-plus/package.json",
+        "package.json"
+      ],
+      ".coffee": [
+        "lib/highlight-selected.coffee",
+        "lib/highlighted-area-view.coffee"
+      ],
+      ".js": [
+        "node_modules/underscore-plus/lib/underscore-plus.js",
+        "node_modules/underscore-plus/node_modules/underscore/underscore-min.js",
+        "node_modules/underscore-plus/node_modules/underscore/underscore.js"
+      ]
+    },
+    "folders": [
+      {
+        "paths": [
+          "",
+          "lib",
+          "spec/fixtures",
+          "spec"
+        ],
+        "dependencies": {
+          "underscore-plus": "1.x"
+        }
+      },
+      {
+        "paths": [
+          "node_modules/underscore-plus/lib",
+          "node_modules/underscore-plus"
+        ],
+        "dependencies": {
+          "underscore": "~1.6.0"
+        }
+      }
+    ]
+  }
 }

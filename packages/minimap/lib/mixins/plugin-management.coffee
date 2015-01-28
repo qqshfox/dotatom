@@ -1,4 +1,5 @@
 Mixin = require 'mixto'
+{CompositeDisposable} = require 'event-kit'
 
 # Public: Provides methods to manage minimap plugins.
 #
@@ -15,16 +16,20 @@ module.exports =
 class PluginManagement extends Mixin
   # Internal: Stores the minimap plugin with their identifying name as key.
   plugins: {}
+  pluginsSubscriptions: {}
 
   # Public: Registers a minimap `plugin` with the given `name`.
   #
-  # name - The identifying name of the plugin. It will be used as activation
-  #        settings name as well as the key to unregister the module.
+  # name - The identifying {String} name of the plugin.
+  #        It will be used as activation settings name as well
+  #        as the key to unregister the module.
   # plugin - The plugin {Object} to register.
   registerPlugin: (name, plugin) ->
     @plugins[name] = plugin
+    @pluginsSubscriptions[name] = new CompositeDisposable
 
-    @emit('plugin:added', {name, plugin})
+    event = {name, plugin}
+    @emitter.emit('did-add-plugin', event)
 
     @registerPluginControls(name, plugin) if atom.config.get('minimap.displayPluginsControls')
 
@@ -32,42 +37,68 @@ class PluginManagement extends Mixin
 
   # Public: Unregisters a plugin from the minimap.
   #
-  # name - The identifying name of the plugin to unregister.
+  # name - The identifying {String} name of the plugin to unregister.
   unregisterPlugin: (name) ->
     plugin = @plugins[name]
     @unregisterPluginControls(name) if atom.config.get('minimap.displayPluginsControls')
     delete @plugins[name]
-    @emit('plugin:removed', {name, plugin})
+
+    event = {name, plugin}
+    @emitter.emit('did-remove-plugin', event)
+
 
   # Internal: Updates the plugin activation state according to the current
   # config.
+  #
+  # name - The identifying {String} name of the plugin.
   updatesPluginActivationState: (name) ->
     plugin = @plugins[name]
 
     pluginActive = plugin.isActive()
     settingActive = atom.config.get("minimap.plugins.#{name}")
 
+    event = {name, plugin}
+
     if settingActive and not pluginActive
       plugin.activatePlugin()
-      @emit('plugin:activated', {name, plugin})
+      @emitter.emit('did-activate-plugin', event)
     else if pluginActive and not settingActive
       plugin.deactivatePlugin()
-      @emit('plugin:deactivated', {name, plugin})
+      @emitter.emit('did-deactivate-plugin', event)
 
+  # Internal: When the `minimap.displayPluginsControls` setting is toggled,
+  # this function will register the commands and setting to manage the plugin
+  # activation from the minimap settings.
+  #
+  # name - The identifying {String} name of the plugin.
+  # plugin - The plugin {Object}.
   registerPluginControls: (name, plugin) ->
     settingsKey = "minimap.plugins.#{name}"
-    @configDefaults.plugins[name] = true
+    @config.plugins.properties[name] =
+      type: 'boolean'
+      default: true
 
     atom.config.set(settingsKey, true) unless atom.config.get(settingsKey)?
 
-    atom.config.observe settingsKey, =>
+    @pluginsSubscriptions[name].add atom.config.observe settingsKey, =>
       @updatesPluginActivationState(name)
 
-    atom.workspaceView.command "minimap:toggle-#{name}", =>
+    commands = {}
+    commands["minimap:toggle-#{name}"] = =>
       atom.config.set settingsKey, not atom.config.get(settingsKey)
       @updatesPluginActivationState(name)
 
+    @pluginsSubscriptions[name].add atom.commands.add 'atom-workspace', commands
+
+  # Internal: When the `minimap.displayPluginsControls` setting is toggled,
+  # this function will unregister the commands and setting that was created
+  # previously.
+  #
+  # name - The identifying {String} name of the plugin.
   unregisterPluginControls: (name) ->
-    atom.config.unobserve "minimap.plugins.#{name}"
-    atom.workspaceView.off "minimap:toggle-#{name}"
-    delete @configDefaults.plugins[name]
+    @pluginsSubscriptions[name].dispose()
+    delete @pluginsSubscriptions[name]
+    delete @config.plugins.properties[name]
+
+  deactivateAllPlugins: ->
+    plugin.deactivatePlugin() for name, plugin of @plugins

@@ -1,112 +1,117 @@
-{$} = require 'atom'
+_ = require 'underscore-plus'
 Q = require 'q'
+
 # HACK The exports is a function here because we are not sure that the
 # `atom-color-highlight` and `minimap` packages will be available when this
 # file is loaded. The binding instance will evaluate the module when
 # created because at that point we're sure that both modules have been
 # loaded.
-module.exports = ->
-  colorHighlightPackage = atom.packages.getLoadedPackage('atom-color-highlight')
-  minimapPackage = atom.packages.getLoadedPackage('minimap')
+module.exports = (minimap, colorHighlight) ->
+  class MinimapColorHighlighView
 
-  minimap = require (minimapPackage.path)
-  colorHighlight = require (colorHighlightPackage.path)
-  AtomColorHighlightView = require (colorHighlightPackage.path + '/lib/atom-color-highlight-view')
+    constructor: (@model, @editor) ->
+      @decorationsByMarkerId = {}
 
-  class MinimapColorHighlighView extends AtomColorHighlightView
-    constructor: (@paneView) ->
-      @subscribe @paneView.model.$activeItem, @onActiveItemChanged
-
-      editorView = @getEditor()
-      model = colorHighlight.modelForEditorView(editorView)
-
-      super(model, editorView)
-
-      @markersUpdated(model.markers) if model?
+      @subscription = @model.onDidUpdateMarkers @requestMarkersUpdate
+      @requestMarkersUpdate() if @model?
+      @observeConfig()
 
     destroy: ->
-      @unsubscribe()
-      @paneView = null
-      @activeItem = null
-      @destroyAllViews()
+      @subscription.off()
+      @destroyDecorations()
       @minimapView?.find('.atom-color-highlight').remove()
 
-    onActiveItemChanged: (item) =>
-      return if item is @activeItem
-      @activeItem = item
+    observeConfig: ->
+      atom.config.observe 'atom-color-highlight.hideMarkersInComments', @rebuildDecorations
+      atom.config.observe 'atom-color-highlight.hideMarkersInStrings', @rebuildDecorations
+      atom.config.observe 'atom-color-highlight.markersAtEndOfLine', @rebuildDecorations
+      atom.config.observe 'atom-color-highlight.dotMarkersSize', @rebuildDecorations
+      atom.config.observe 'atom-color-highlight.dotMarkersSpading', @rebuildDecorations
 
-      editorView = @getEditor()
-      return unless editorView?.hasClass('editor')
-      model = colorHighlight.modelForEditorView(editorView)
+    destroyDecorations: ->
+      decoration.destroy() for id,decoration of @decorationsByMarkerId
 
-      @setEditorView(editorView)
-      @setModel(model)
-
-      @removeMarkers()
-      @markersUpdated(model.markers) if model?
-
-    attach: ->
-      @minimapView?.find('.atom-color-highlight').remove()
-
-      @getMinimap()
-      .then (minimapView) =>
-        if not @minimapView? or @minimapView.find('.atom-color-highlight').length is 0
-          minimapView.miniOverlayer.append(this)
-          @minimapView = minimapView
-          @patchMarkers()
-
-    getEditor: -> @paneView.activeView
     getMinimap: ->
       defer = Q.defer()
-      if @editorView?.hasClass('editor')
-        minimapView = minimap.minimapForEditorView(@editorView)
-        if minimapView?
-          defer.resolve(minimapView)
-        else
-          poll = =>
-            minimapView = minimap.minimapForEditorView(@editorView)
-            if minimapView?
-              defer.resolve(minimapView)
-            else
-              setTimeout(poll, 10)
 
-          setTimeout(poll, 10)
+      if @minimapModel?
+        defer.resolve(@minimapModel)
+        return defer.promise
+
+      @minimapModel = minimap.minimapForEditor(@editor)
+
+      if @minimapModel?
+        defer.resolve(@minimapModel)
       else
-        defer.reject("#{@editorView} is not a legal editor")
+        poll = =>
+          @minimapModel = minimap.minimapForEditor(@editor)
+          if @minimapModel?
+            defer.resolve(@minimapModel)
+          else
+            setTimeout(poll, 10)
+
+        setTimeout(poll, 10)
 
       defer.promise
 
-    setEditorView: (editorView) ->
-      return if typeof editorView is 'function'
-      @detach() if @minimapView?
-      @editorView = editorView
-      {@editor} = @editorView
-      @attach()
-
     updateSelections: ->
 
-    activeTabSupportMinimap: -> @getEditor()
+    requestMarkersUpdate: =>
+      return if @frameRequested
 
-    # HACK We don't want the markers to disappear when they're not
-    # visible in the editor visible area so we'll hook on the
-    # `markersUpdated` method and replace the corresponding method
-    # on the fly.
-    markersUpdated: (markers) ->
-      super(markers)
-      return unless @minimapView?
-      @patchMarkers()
+      @frameRequested = true
+      requestAnimationFrame =>
+        @updateMarkers()
+        @frameRequested = false
 
-    patchMarkers: ->
-      for k,marker of @markerViews
-        unless marker.patched
-          getSize = marker.getSize
-          getSpacing = marker.getSpacing
-          marker.getSize = => getSize.call(marker) * @minimapView.scaleX
-          marker.getSpacing = => getSpacing.call(marker) * @minimapView.scaleX
-          marker.patched = true
+    updateMarkers: =>
+      @markersUpdated(@model.markers)
 
-        marker.intersectsRenderedScreenRows = (range) =>
-          range.intersectsRowRange(@minimapView.miniEditorView.firstRenderedScreenRow, @minimapView.miniEditorView.lastRenderedScreenRow)
-        marker.editorView = @minimapView
-        marker.updateNeeded = true
-        marker.updateDisplay()
+    markersUpdated: (markers) =>
+      markers ||= []
+      @getMinimap()
+      .then (minimap) =>
+        decorationsToRemove = _.clone(@decorationsByMarkerId)
+        for marker in markers
+          continue if @markerHidden(marker)
+
+          if @decorationsByMarkerId[marker.id]?
+            delete decorationsToRemove[marker.id]
+          else
+            decoration = minimap.decorateMarker(marker, type: 'highlight', color: marker.bufferMarker.properties.cssColor)
+            @decorationsByMarkerId[marker.id] = decoration
+
+        @markers = markers
+
+        for id, decoration of decorationsToRemove
+          decoration.destroy()
+          delete @decorationsByMarkerId[id]
+      .fail (reason) ->
+        console.log reason.stack
+
+    rebuildDecorations: =>
+      @destroyDecorations()
+      @markersUpdated(@markers)
+
+    markerHidden: (marker) ->
+      @markerHiddenDueToComment(marker) or @markerHiddenDueToString(marker)
+
+    getScope: (bufferRange) ->
+      if @editor.displayBuffer.scopesForBufferPosition?
+        @editor.displayBuffer.scopesForBufferPosition(bufferRange.start).join(';')
+      else
+        descriptor = @editor.displayBuffer.scopeDescriptorForBufferPosition(bufferRange.start)
+        if descriptor.join?
+          descriptor.join(';')
+        else
+          descriptor.scopes.join(';')
+
+    markerHiddenDueToComment: (marker) ->
+      bufferRange = marker.getBufferRange()
+      scope = @getScope(bufferRange)
+      atom.config.get('atom-color-highlight.hideMarkersInComments') and scope.match(/comment/)?
+
+    markerHiddenDueToString: (marker) ->
+      bufferRange = marker.getBufferRange()
+      scope = @getScope(bufferRange)
+      atom.config.get('atom-color-highlight.hideMarkersInStrings') and scope.match(/string/)?

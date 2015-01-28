@@ -1,151 +1,129 @@
-{Emitter} = require 'emissary'
-Debug = require 'prolix'
-semver = require 'semver'
+{Model} = require 'theorist'
+{Emitter, CompositeDisposable} = require 'event-kit'
+DecorationManagement = require './mixins/decoration-management'
 
-ViewManagement = require './mixins/view-management'
-PluginManagement = require './mixins/plugin-management'
+module.exports =
+class Minimap extends Model
+  DecorationManagement.includeInto(this)
 
-require '../vendor/resizeend'
+  constructor: ({@textEditor}={}) ->
+    unless @textEditor?
+      throw new Error('Cannot create a minimap without an editor')
 
-# Public: The `Minimap` package provides an eagle-eye view of text buffers.
-#
-# It also provides API for plugin packages that want to interact with the
-# minimap and be available to the user through the minimap settings.
-#
-# ## Events
-#
-# * `activated` -
-#      Emitted synchronously when the package is activated. By suscribing
-#      to this event other packages can be notified of the activation of the
-#      minimap. At that point the minimap views have been created.
-#
-# * `deactivated` -
-#      Emitted synchronously when the package have been deactivated. The views
-#      are no longer available at that point.
-#
-# * `minimap-view:created` -
-#      Emitted synchronously when a {MinimapView} have been created for
-#      an active {PaneView}.
-#      Your handler will be called with an object containing the following keys.
-#      * `view`: The {MinimapView} that was created
-#
-# * `minimap-view:will-be-destroyed` -
-#      Emitted synchronously when a {MinimapView} is about to be destroyed.
-#      Your handler will be called with an object containing the following keys.
-#      * `view`: The {MinimapView} that was created
-#
-# * `minimap-view:destroyed` -
-#      Emitted synchronously when a {MinimapView} was destroyed, at that point
-#      the view have been removed from the DOM.
-#      Your handler will be called with an object containing the following keys.
-#      * `view`: The {MinimapView} that was created
-#
-# * `plugin:added` -
-#      Emitted synchronously when a minimap plugin was registered.
-#      Your handler will be called with an object containing the following keys.
-#      * `name` - The {String} name used to register the plugin
-#      * `plugin` - The plugin {Object} that was registered
-#
-# * `plugin:removed` -
-#      Emitted synchronously when a minimap plugin was unregistered.
-#      Your handler will be called with an object containing the following keys.
-#      * `name` - The {String} name used to register the plugin
-#      * `plugin` - The plugin {Object} that was unregistered
-#
-# * `plugin:activated` -
-#      Emitted synchronously when a minimap plugin was activated.
-#      Your handler will be called with an object containing the following keys.
-#      * `name` - The {String} name used to register the plugin
-#      * `plugin` - The plugin {Object} that was activated
-#
-# * `plugin:deactivated` -
-#      Emitted synchronously when a minimap plugin was deactivated.
-#      Your handler will be called with an object containing the following keys.
-#      * `name` - The {String} name used to register the plugin
-#      * `plugin` - The plugin {Object} that was deactivated
-#
-# ## Plugins Interface
-#
-# Plugins should conform to the following interface:
-#
-# ```coffee
-# class Plugin
-#   void activatePlugin: ->
-#   void deactivatePlugin: ->
-#   bool isActive: ->
-# ```
-class Minimap
-  Emitter.includeInto(this)
-  Debug('minimap').includeInto(this)
-  ViewManagement.includeInto(this)
-  PluginManagement.includeInto(this)
+    super
+    @emitter = new Emitter
+    @subscriptions = subs = new CompositeDisposable
+    @initializeDecorations()
 
-  # Public: The minimap package version
-  version: require('../package.json').version
+    subs.add atom.config.observe 'editor.scrollPastEnd', (@scrollPastEnd) =>
+      @emitter.emit('did-change-config')
+    subs.add atom.config.observe 'minimap.charHeight', (@charHeight) =>
+      @emitter.emit('did-change-config')
+    subs.add atom.config.observe 'minimap.charWidth', (@charWidth) =>
+      @emitter.emit('did-change-config')
+    subs.add atom.config.observe 'minimap.interline', (@interline) =>
+      @emitter.emit('did-change-config')
 
-  # Public: The default minimap settings
-  configDefaults:
-    plugins: {}
-    autoToggle: false
-    displayMinimapOnLeft: false
-    displayCodeHighlights: true
-    displayPluginsControls: true
-    minimapScrollIndicator: true
-    lineOverdraw: 10
-    useHardwareAcceleration: true
-    scale: 0.16
+    subs.add @textEditor.onDidChange (changes) => @emitChanges(changes)
+    subs.add @textEditor.onDidChangeScrollTop (scrollTop) =>
+      @emitter.emit('did-change-scroll-top', scrollTop)
+    subs.add @textEditor.onDidChangeScrollLeft (scrollLeft) =>
+      @emitter.emit('did-change-scroll-left', scrollLeft)
+    subs.add @textEditor.onDidDestroy => @destroy()
 
+    # FIXME: Some changes occuring during the tokenization produces
+    # ranges that deceive the canvas rendering by making some
+    # lines at the end of the buffer intact while they are in fact not
+    # resulting in extra lines appearing at the end of the minimap.
+    # Forcing a whole repaint fix that but is suboptimal.
+    subs.add @textEditor.displayBuffer.onDidTokenize =>
+      @emitter.emit('did-change-config')
 
-  # Internal: The activation state of the minimap package.
-  active: false
+  destroyed: ->
+    @subscriptions.dispose()
+    @textEditor = null
+    @emitter.emit 'did-destroy'
 
-  # Public: Activates the minimap package.
-  activate: ->
-    atom.workspaceView.command 'minimap:toggle', => @toggleNoDebug()
-    atom.workspaceView.command 'minimap:toggle-debug', => @toggleDebug()
-    if atom.config.get('minimap.displayPluginsControls')
-      atom.workspaceView.command 'minimap:open-quick-settings', =>
-        atom.workspaceView.getActivePaneView().find('.minimap .open-minimap-quick-settings').mousedown()
+  onDidChange: (callback) ->
+    @emitter.on 'did-change', callback
 
-    atom.workspaceView.toggleClass 'minimap-on-left', atom.config.get('minimap.displayMinimapOnLeft')
-    atom.config.observe 'minimap.displayMinimapOnLeft', =>
-      atom.workspaceView.toggleClass 'minimap-on-left', atom.config.get('minimap.displayMinimapOnLeft')
+  onDidChangeConfig: (callback) ->
+    @emitter.on 'did-change-config', callback
 
-    @toggleNoDebug() if atom.config.get 'minimap.autoToggle'
+  onDidChangeScrollTop: (callback) ->
+    @emitter.on 'did-change-scroll-top', callback
 
-  # Public: Deactivates the minimap package.
-  deactivate: ->
-    @destroyViews()
-    @emit('deactivated')
+  onDidChangeScrollLeft: (callback) ->
+    @emitter.on 'did-change-scroll-left', callback
 
-  # Public: Toggles the minimap activation state with debug turned on.
-  toggleDebug: ->
-    @getChannel().activate()
-    @toggle()
+  onDidDestroy: (callback) ->
+    @emitter.on 'did-destroy', callback
 
-  # Public: Toggles the minimap activation state with debug turned off.
-  toggleNoDebug: ->
-    @getChannel().deactivate()
-    @toggle()
+  getTextEditor: -> @textEditor
 
-  # Public: Verifies that the passed-in version expression is satisfied by
-  # the current minimap version.
-  #
-  # `expectedVersion` - A [semver]() compatible expression to match against
-  #                     the minimap version.
-  #
-  # Returns `true` if the version matches the expression, `false` otherwise.
-  versionMatch: (expectedVersion) -> semver.satisfies(@version, expectedVersion)
+  getTextEditorHeight: -> @textEditor.getHeight() * @getVerticalScaleFactor()
 
-  # Internal: Toggles the minimap activation state.
-  toggle: () ->
-    if @active
-      @active = false
-      @deactivate()
-    else
-      @createViews()
-      @active = true
-      @emit('activated')
+  getTextEditorScrollTop: -> @textEditor.getScrollTop() * @getVerticalScaleFactor()
 
-# The minimap module is an instance of the {Minimap} class.
-module.exports = new Minimap()
+  getTextEditorScrollLeft: -> @textEditor.getScrollLeft() * @getHorizontalScaleFactor()
+
+  getTextEditorMaxScrollTop: ->
+    maxScrollTop = @textEditor.displayBuffer.getMaxScrollTop()
+    if @scrollPastEnd
+      maxScrollTop -= @textEditor.getHeight() - 3 * @textEditor.displayBuffer.getLineHeightInPixels()
+
+    maxScrollTop
+
+  getTextEditorScrollRatio: ->
+    @textEditor.getScrollTop() / @getTextEditorMaxScrollTop()
+
+  getCapedTextEditorScrollRation: ->
+    Math.min(1, @getTextEditorScrollRatio())
+
+  getHeight: -> @textEditor.getScreenLineCount() * @getLineHeight()
+
+  getVisibleHeight: ->
+    Math.min(@textEditor.getHeight(), @getHeight())
+
+  getVerticalScaleFactor: ->
+    @getLineHeight() / @textEditor.getLineHeightInPixels()
+
+  getHorizontalScaleFactor: ->
+    @getCharWidth() / @textEditor.getDefaultCharWidth()
+
+  getLineHeight: -> @charHeight + @interline
+
+  getCharWidth: -> @charWidth
+
+  getCharHeight: -> @charHeight
+
+  getInterline: -> @interline
+
+  getFirstVisibleScreenRow: ->
+    Math.floor(@getMinimapScrollTop() / @getLineHeight())
+
+  getLastVisibleScreenRow: ->
+    Math.ceil((@getMinimapScrollTop() + @textEditor.getHeight()) / @getLineHeight())
+
+  getMinimapScrollTop: ->
+    Math.abs(@getCapedTextEditorScrollRation() * @getMinimapMaxScrollTop())
+
+  getMinimapMaxScrollTop: -> Math.max(0, @getHeight() - @textEditor.getHeight())
+
+  canScroll: -> @getMinimapMaxScrollTop() > 0
+
+  getMarker: (id) -> @textEditor.getMarker(id)
+
+  findMarkers: (o) ->
+    # FIXME In tests this call leads to an error raised deep down in the
+    # editor model when looping in markers.
+    try
+      @textEditor.findMarkers(o)
+    catch
+      return []
+
+  markBufferRange: (range) -> @textEditor.markBufferRange(range)
+
+  emitChanges: (changes) -> @emitter.emit('did-change', changes)
+
+  stackChanges: (changes) -> @emitChanges(changes)
